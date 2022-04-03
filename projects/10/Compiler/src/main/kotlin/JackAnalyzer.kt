@@ -14,10 +14,8 @@ class JackAnalyzer(private val pathName: String) {
     }
 
     private fun compileFile(filePath: String) {
-        val jackAnalyzer = JackTokenizer(filePath)
-        while (jackAnalyzer.hasMoreTokens()) {
-            jackAnalyzer.advance()
-        }
-        jackAnalyzer.writeToXmlFile()
+        val compilationEngine = CompilationEngine(filePath)
+        compilationEngine.compileClass()
+        compilationEngine.writeToFile()
     }
 }

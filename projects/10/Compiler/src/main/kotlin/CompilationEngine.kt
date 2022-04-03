@@ -41,38 +41,18 @@ class CompilationEngine(private val inputFileName: String) {
         while (isSubroutine()) {
             compileSubroutine()
         }
+        processSymbol('}')
         depth--
-//        processSymbol('}')
-//        xmlStreamWriter?.writeEndElement()
+        xmlStreamWriter?.writeEndElement()
     }
 
-    fun compileClassVarDec() {
+    private fun compileClassVarDec() {
         writeStartElement("classVarDec")
         depth++
         processKeyword(setOf(KeywordType.FIELD, KeywordType.STATIC))
         compileDec()
         depth--
         writeEndElement()
-    }
-
-    fun compileDec() {
-        compileTypeClassVar()
-        processIdentifier() //var name
-        while (jackTokenizer.tokenType() == TokenType.SYMBOL
-            && jackTokenizer.symbol() == ','
-        ) {
-            processSymbol(',')
-            processIdentifier() //var name
-        }
-        processSymbol(';')
-    }
-
-    private fun compileTypeClassVar() {
-        if (jackTokenizer.tokenType() == TokenType.IDENTIFIER) {
-            processIdentifier()
-        } else {
-            processKeyword(setOf(KeywordType.INT, KeywordType.CHAR, KeywordType.BOOLEAN))
-        }
     }
 
     private fun isClassVarDec(): Boolean {
@@ -87,51 +67,179 @@ class CompilationEngine(private val inputFileName: String) {
                 set.contains(jackTokenizer.keyWord())
     }
 
-    fun compileSubroutine() {
+    private fun compileSubroutine() {
+        writeStartElement("subroutineDec")
         depth++
-
+        processKeyword(setOf(KeywordType.CONSTRUCTOR, KeywordType.METHOD, KeywordType.FUNCTION))
+        if (jackTokenizer.tokenType() == TokenType.KEYWORD) {
+            processKeyword(setOf(KeywordType.VOID))
+        } else {
+            compileType()
+        }
+        processIdentifier()
+        processSymbol('(')
+        compileParameterList()
+        processSymbol(')')
+        compileSubroutineBody()
         depth--
+        writeEndElement()
     }
 
-    fun compileParameterList() {
-        depth++
-
-        depth--
+    private fun compileType() {
+        if (jackTokenizer.tokenType() == TokenType.IDENTIFIER) {
+            processIdentifier()
+        } else {
+            processKeyword(setOf(KeywordType.INT, KeywordType.CHAR, KeywordType.BOOLEAN))
+        }
     }
 
-    fun compileSubroutineBody() {
-        depth++
-
-        depth--
+    private fun isType(): Boolean {
+        return jackTokenizer.tokenType() == TokenType.IDENTIFIER ||
+                setOf("int", "char", "boolean").contains(jackTokenizer.getCurrentToken())
     }
 
-    fun compileVarDec() {
+    private fun compileParameterList() {
+        writeStartElement("parameterList")
         depth++
-
+        compileTypeList()
         depth--
+        writeEndElement()
     }
 
-    fun compileStatements() {
-        depth++
-
-        depth--
+    private fun compileTypeList() {
+        if (!isType()) {
+            return
+        }
+        compileType()
+        processIdentifier() //var name
+        while (jackTokenizer.tokenType() == TokenType.SYMBOL
+            && jackTokenizer.symbol() == ','
+        ) {
+            processSymbol(',')
+            compileType()
+            processIdentifier() //var name
+        }
     }
 
-    fun compileLet() {
+    private fun compileSubroutineBody() {
+        writeStartElement("subroutineBody")
         depth++
-
+        processSymbol('{')
+        while (jackTokenizer.tokenType() == TokenType.KEYWORD &&
+            jackTokenizer.keyWord() == KeywordType.VAR
+        ) {
+            compileVarDec()
+        }
+        compileStatements()
+        processSymbol('}')
         depth--
+        writeEndElement()
     }
 
-    fun compileIf() {
+    private fun compileVarDec() {
+        writeStartElement("varDec")
         depth++
-
+        processKeyword(setOf(KeywordType.VAR))
+        compileDec()
         depth--
+        writeEndElement()
     }
 
-    fun compileWhile() {
+
+    private fun compileDec() {
+        compileType()
+        processIdentifier() //var name
+        while (jackTokenizer.tokenType() == TokenType.SYMBOL
+            && jackTokenizer.symbol() == ','
+        ) {
+            processSymbol(',')
+            processIdentifier() //var name
+        }
+        processSymbol(';')
+    }
+
+    private fun compileStatements() {
+        writeStartElement("statements")
         depth++
+        while (isStatement()) {
+            when (jackTokenizer.keyWord()) {
+                KeywordType.LET -> compileLet()
+                KeywordType.IF -> compileIf()
+                KeywordType.WHILE -> compileWhile()
+                KeywordType.DO -> compileDo()
+                KeywordType.RETURN -> compileReturn()
+                else -> {
+                    println("Syntax error statement not support")
+                }
+            }
+        }
+        depth--
+        writeEndElement()
+    }
+
+    private fun isStatement(): Boolean {
+        val statementKeywordSet = setOf(
+            KeywordType.LET,
+            KeywordType.IF,
+            KeywordType.WHILE,
+            KeywordType.DO,
+            KeywordType.RETURN
+        )
+
+        return jackTokenizer.tokenType() == TokenType.KEYWORD &&
+                statementKeywordSet.contains(jackTokenizer.keyWord())
+    }
+
+    private fun compileLet() {
+        writeStartElement("letStatement")
+        depth++
+        processKeyword(setOf(KeywordType.LET))
+        processIdentifier()
+        if (jackTokenizer.getCurrentToken() == "[") {
+            processSymbol('[')
+            compileExpression()
+            processSymbol(']')
+        }
+        processSymbol('=')
+        compileExpression()
+        processSymbol(';')
+        depth--
+        writeEndElement()
+    }
+
+    private fun compileIf() {
+        writeStartElement("ifStatement")
+        depth++
+        processKeyword(setOf(KeywordType.IF))
+        processSymbol('(')
+        compileExpression()
+        processSymbol(')')
+        processSymbol('{')
+        compileStatements()
+        processSymbol('}')
+        var elseCount = 0
+        while (isElse()) {
+            if (elseCount > 1) {
+                println("Syntax error. Else statement can only appear 0 or 1 times")
+                return
+            }
+
+            processKeyword(setOf(KeywordType.ELSE))
+            processSymbol('{')
+            compileStatements()
+            processSymbol('}')
+            elseCount++
+        }
+        depth--
+        writeEndElement()
+    }
+
+    private fun isElse(): Boolean =
+        jackTokenizer.getCurrentToken() == "else"
+
+    private fun compileWhile() {
         writeStartElement("whileStatement")
+        depth++
         processKeyword(setOf(KeywordType.WHILE))
         processSymbol('(')
         compileExpression()
@@ -139,50 +247,219 @@ class CompilationEngine(private val inputFileName: String) {
         processSymbol('{')
         compileStatements()
         processSymbol('}')
-        xmlStreamWriter?.writeEndElement()
         depth--
+        writeEndElement()
     }
 
-    fun writeStartElement(str: String) {
+    private fun compileDo() {
+        writeStartElement("doStatement")
+        depth++
+        processKeyword(setOf(KeywordType.DO))
+        compileSubroutineCall()
+        processSymbol(';')
+        depth--
+        writeEndElement()
+    }
+
+    private fun compileArraySubscript() {
+        processSymbol('[')
+        compileExpression()
+        processSymbol(']')
+    }
+
+    private fun compileSubroutineCall() {
+        processIdentifier()
+        if (isSymbol('.')) {
+            processSymbol('.')
+            processIdentifier()
+            processSymbol('(')
+            compileExpressionList()
+            processSymbol(')')
+        } else {
+            processSymbol('(')
+            compileExpressionList()
+            processSymbol(')')
+        }
+    }
+
+    private fun compileSubroutineCallTerm() {
+        if (isSymbol('.')) {
+            processSymbol('.')
+            processIdentifier()
+        }
+        processSymbol('(')
+        compileExpressionList()
+        processSymbol(')')
+
+    }
+
+    private fun compileReturn() {
+        writeStartElement("returnStatement")
+        depth++
+        processKeyword(setOf(KeywordType.RETURN))
+        compileExpression()
+        processSymbol(';')
+        depth--
+        writeEndElement()
+    }
+
+    private fun compileExpression() {
+        if (!isTerm()) {
+            return
+        }
+
+        writeStartElement("expression")
+        depth++
+        compileTerm()
+        while (isOp()) {
+            processSymbol(
+                setOf(
+                    '+',
+                    '-',
+                    '*',
+                    '/',
+                    '&',
+                    '|',
+                    '<',
+                    '>',
+                    '='
+                )
+            )
+            compileTerm()
+        }
+        depth--
+        writeEndElement()
+    }
+
+    private fun compileTerm() {
+        writeStartElement("term")
+        depth++
+        val tokenType = jackTokenizer.tokenType()
+        when {
+            tokenType == TokenType.STRING_CONST -> {
+                processStringVal()
+            }
+            tokenType == TokenType.INT_CONST -> {
+                processIntVal()
+            }
+            isKeywordConstant(tokenType) -> {
+                processKeyword(
+                    setOf(
+                        KeywordType.TRUE,
+                        KeywordType.FALSE,
+                        KeywordType.NULL,
+                        KeywordType.THIS
+                    )
+                )
+            }
+            isTermExpression(tokenType) -> {
+                processSymbol('(')
+                compileExpression()
+                processSymbol(')')
+            }
+            isUnaryOp(tokenType) -> {
+                processSymbol(setOf('-', '~'))
+                compileTerm()
+            }
+            isVarName() -> {
+                processIdentifier()
+                val currentToken = jackTokenizer.getCurrentToken()
+                if (currentToken == "[") {
+                    compileArraySubscript()
+                } else if (currentToken == "(" || currentToken == ".") {
+                    compileSubroutineCallTerm()
+                }
+            }
+        }
+
+        depth--
+        writeEndElement()
+    }
+
+    private fun isVarName(): Boolean {
+        val tokenType = jackTokenizer.tokenType()
+        return tokenType == TokenType.IDENTIFIER
+    }
+
+    private fun isOp(): Boolean {
+        if (jackTokenizer.tokenType() != TokenType.SYMBOL)
+            return false
+
+        val symbol = jackTokenizer.symbol()
+        return symbol == '+' || symbol == '+' ||
+                symbol == '-' ||
+                symbol == '*' ||
+                symbol == '/' ||
+                symbol == '&' ||
+                symbol == '|' ||
+                symbol == '<' ||
+                symbol == '>' ||
+                symbol == '='
+    }
+
+    private fun compileExpressionList() {
+        writeStartElement("expressionList")
+        depth++
+        if (isTerm()) {
+            compileExpression()
+            while (isSymbol(',')) {
+                processSymbol(',')
+                compileExpression()
+            }
+        }
+        depth--
+        writeEndElement()
+    }
+
+    private fun isTerm(): Boolean {
+        val tokenType = jackTokenizer.tokenType()
+        return tokenType == TokenType.INT_CONST ||
+                tokenType == TokenType.STRING_CONST ||
+                isKeywordConstant(tokenType) ||
+                tokenType == TokenType.IDENTIFIER ||
+                isTermExpression(tokenType) ||
+                isUnaryOp(tokenType)
+    }
+
+    private fun isTermExpression(tokenType: TokenType): Boolean {
+        return tokenType == TokenType.SYMBOL &&
+                jackTokenizer.symbol() == '('
+    }
+
+    private fun isUnaryOp(tokenType: TokenType): Boolean {
+        if (tokenType != TokenType.SYMBOL)
+            return false
+
+        val symbol = jackTokenizer.symbol()
+        return symbol == '-' || symbol == '~'
+    }
+
+    private fun isKeywordConstant(tokenType: TokenType): Boolean {
+        if (tokenType != TokenType.KEYWORD)
+            return false
+
+        val keyWord = jackTokenizer.keyWord()
+        return keyWord == KeywordType.TRUE ||
+                keyWord == KeywordType.FALSE ||
+                keyWord == KeywordType.NULL ||
+                keyWord == KeywordType.THIS
+    }
+
+    private fun writeStartElement(str: String) {
         writeTab(depth)
         xmlStreamWriter?.writeStartElement(str)
         xmlStreamWriter?.writeCharacters(System.lineSeparator())
     }
 
-    fun writeEndElement() {
+    private fun writeEndElement() {
         writeTab(depth)
         xmlStreamWriter?.writeEndElement()
+        xmlStreamWriter?.writeCharacters(System.lineSeparator())
     }
 
-    fun compileDo() {
-        depth++
-
-        depth--
-    }
-
-    fun compileReturn() {
-        depth++
-
-        depth--
-    }
-
-    fun compileExpression() {
-        depth++
-
-        depth--
-    }
-
-    fun compileTerm() {
-        depth++
-
-        depth--
-    }
-
-    fun compileExpressionList() {
-        depth++
-
-        depth--
-    }
+    private fun isSymbol(symbol: Char) =
+        jackTokenizer.tokenType() == TokenType.SYMBOL &&
+                jackTokenizer.symbol() == symbol
 
     private fun processKeyword(keywordTypeSet: Set<KeywordType>) {
         if (jackTokenizer.tokenType() == TokenType.KEYWORD &&
@@ -206,6 +483,17 @@ class CompilationEngine(private val inputFileName: String) {
         advanceToken()
     }
 
+    private fun processSymbol(symbolSet: Set<Char>) {
+        if (jackTokenizer.tokenType() == TokenType.SYMBOL &&
+            symbolSet.contains(jackTokenizer.symbol())
+        ) {
+            writeTokenToFile(TokenType.SYMBOL, jackTokenizer.symbol().toString())
+        } else {
+            printSyntaxError(symbolSet.toString())
+        }
+        advanceToken()
+    }
+
     private fun processIdentifier() {
         if (jackTokenizer.tokenType() == TokenType.IDENTIFIER) {
             writeTokenToFile(TokenType.IDENTIFIER, jackTokenizer.identifier())
@@ -215,24 +503,20 @@ class CompilationEngine(private val inputFileName: String) {
         advanceToken()
     }
 
-    private fun processIntVal(intVal: Int) {
-        if (jackTokenizer.tokenType() == TokenType.INT_CONST &&
-            jackTokenizer.intVal() == intVal
-        ) {
-            writeTokenToFile(TokenType.INT_CONST, intVal.toString())
+    private fun processIntVal() {
+        if (jackTokenizer.tokenType() == TokenType.INT_CONST) {
+            writeTokenToFile(TokenType.INT_CONST, jackTokenizer.intVal().toString())
         } else {
-            printSyntaxError(intVal.toString())
+            printSyntaxError("int value")
         }
         advanceToken()
     }
 
-    private fun processStringVal(stringVal: String) {
-        if (jackTokenizer.tokenType() == TokenType.STRING_CONST &&
-            jackTokenizer.stringVal() == stringVal
-        ) {
-            writeTokenToFile(TokenType.STRING_CONST, stringVal)
+    private fun processStringVal() {
+        if (jackTokenizer.tokenType() == TokenType.STRING_CONST) {
+            writeTokenToFile(TokenType.STRING_CONST, jackTokenizer.stringVal())
         } else {
-            printSyntaxError(stringVal)
+            printSyntaxError("string value")
         }
         advanceToken()
     }
@@ -277,7 +561,7 @@ class CompilationEngine(private val inputFileName: String) {
     private fun writeTab(depth: Int) {
         var sb = StringBuilder()
         repeat(depth) {
-            sb.append("\t")
+            sb.append("  ")
         }
         xmlStreamWriter?.writeCharacters(sb.toString())
     }
@@ -285,13 +569,14 @@ class CompilationEngine(private val inputFileName: String) {
     fun writeToFile() {
         xmlStreamWriter?.flush()
         xmlStreamWriter?.close()
-        println("Writing xml to $outputFileName")
+        println("Compiled parse tree to $outputFileName")
         jackTokenizer.writeToXmlFile()
     }
 }
 
 fun main() {
-    val compilationEngine = CompilationEngine("/Users/arturokuang/Downloads/nand2tetris/projects/10/Square/Square.jack")
+    val compilationEngine =
+        CompilationEngine("/Users/arturokuang/Downloads/nand2tetris/projects/10/Square/Main.jack")
     compilationEngine.compileClass()
     compilationEngine.writeToFile()
 }
