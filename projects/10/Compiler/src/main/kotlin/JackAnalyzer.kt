@@ -6,7 +6,7 @@ class JackAnalyzer(private val pathName: String) {
         File(pathName).walk().forEach {
             val fileName = it.name
             if (fileName.endsWith(".jack")) {
-                println("Compiling $fileName")
+                println("Compiling ${it.path}")
                 compileFile(it.absolutePath)
                 println("Finishing compiling $fileName")
             }

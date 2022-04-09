@@ -1,9 +1,9 @@
 import java.lang.IllegalArgumentException
 
-class SymbolTable {
+class SymbolTableHack {
 
     enum class Kind {
-        STATIC, FIELD, ARG, VAR
+        STATIC, FIELD, ARG, VAR, NO_KIND
     }
 
     data class SymbolTableColumn(
@@ -54,6 +54,9 @@ class SymbolTable {
             Kind.ARG -> argCount
             Kind.FIELD -> fieldCount
             Kind.VAR -> varCount
+            else -> {
+                throw IllegalArgumentException("NO KIND?")
+            }
         }
     }
 
@@ -70,5 +73,9 @@ class SymbolTable {
     fun indexOf(name: String): Int {
         return hackSymbolTable[name]?.count
             ?: throw NoSuchElementException("Symbol not in symbol table")
+    }
+
+    override fun toString(): String {
+        return hackSymbolTable.toString()
     }
 }

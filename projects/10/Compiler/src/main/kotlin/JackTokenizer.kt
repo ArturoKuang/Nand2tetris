@@ -27,6 +27,8 @@ class JackTokenizer(inputFileName: String) {
     private val PATTERN_NUMBER = Pattern.compile("[0-9]+")
     private val PATTERN_IDENTIFIER_AZ = Pattern.compile("[a-zA-Z]")
 
+    private val symbolTableHack: SymbolTableHack = SymbolTableHack()
+
     enum class TokenType {
         KEYWORD, SYMBOL, INT_CONST, STRING_CONST, IDENTIFIER, NO_TYPE
     }
@@ -90,7 +92,6 @@ class JackTokenizer(inputFileName: String) {
 
         charList = inputLines.flatMap { it.toList() }
         currentChar = charList[currentCharNum]
-//        currentType = TokenType.KEYWORD
         if (isOutputFile) {
             File(outputFileName).createNewFile()
             fileWriter = FileWriter(outputFileName)
@@ -149,10 +150,6 @@ class JackTokenizer(inputFileName: String) {
                 shouldAdvanceNextChar = false
             }
         }
-
-//        if (currentToken.isEmpty()) {
-//            advance()
-//        }
 
         if (shouldAdvanceNextChar)
             advanceChar()

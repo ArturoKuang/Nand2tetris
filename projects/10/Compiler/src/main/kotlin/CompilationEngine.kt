@@ -7,19 +7,24 @@ import javax.xml.stream.XMLStreamWriter
 import JackTokenizer.TokenType
 import JackTokenizer.KeywordType
 
-class CompilationEngine(private val inputFileName: String) {
-    val outputFileName = "${inputFileName.substringBeforeLast(".")}(0).xml"
+class CompilationEngine(inputFileName: String) {
+    private val outputFileName = "${inputFileName.substringBeforeLast(".")}(0).xml"
 
     private val outputFactory: XMLOutputFactory =
         XMLOutputFactory.newFactory()
 
     private var fileWriter: FileWriter? = null
-
     private var xmlStreamWriter: XMLStreamWriter? = null
-
     private var depth = 0
-
     private val jackTokenizer = JackTokenizer(inputFileName)
+    private val classSymbolTable = SymbolTableHack()
+    private val subroutineSymbolTable = SymbolTableHack()
+
+    private var name: String = ""
+    private var type: String = ""
+    private var kind: SymbolTableHack.Kind = SymbolTableHack.Kind.NO_KIND
+
+    private var className: String = ""
 
     init {
         File(outputFileName).createNewFile()
@@ -33,6 +38,7 @@ class CompilationEngine(private val inputFileName: String) {
         writeStartElement("class")
         depth++
         processKeyword(setOf(KeywordType.CLASS))
+        className = jackTokenizer.getCurrentToken()
         processIdentifier()
         processSymbol('{')
         while (isClassVarDec()) {
@@ -49,8 +55,15 @@ class CompilationEngine(private val inputFileName: String) {
     private fun compileClassVarDec() {
         writeStartElement("classVarDec")
         depth++
+
+        val keyword = jackTokenizer.keyWord()
+        if (keyword == KeywordType.STATIC) {
+            kind = SymbolTableHack.Kind.STATIC
+        } else if (keyword == KeywordType.FIELD) {
+            kind = SymbolTableHack.Kind.FIELD
+        }
         processKeyword(setOf(KeywordType.FIELD, KeywordType.STATIC))
-        compileDec()
+        compileDec(kind)
         depth--
         writeEndElement()
     }
@@ -70,12 +83,18 @@ class CompilationEngine(private val inputFileName: String) {
     private fun compileSubroutine() {
         writeStartElement("subroutineDec")
         depth++
+        subroutineSymbolTable.reset()
+        val keywordType = jackTokenizer.keyWord()
+        if (keywordType == KeywordType.METHOD) {
+            subroutineSymbolTable.define("this", className, SymbolTableHack.Kind.ARG)
+        }
         processKeyword(setOf(KeywordType.CONSTRUCTOR, KeywordType.METHOD, KeywordType.FUNCTION))
         if (jackTokenizer.tokenType() == TokenType.KEYWORD) {
             processKeyword(setOf(KeywordType.VOID))
         } else {
             compileType()
         }
+//        val subroutineName = jackTokenizer.getCurrentToken()
         processIdentifier()
         processSymbol('(')
         compileParameterList()
@@ -83,6 +102,7 @@ class CompilationEngine(private val inputFileName: String) {
         compileSubroutineBody()
         depth--
         writeEndElement()
+//        println("$subroutineName symbol table $subroutineSymbolTable")
     }
 
     private fun compileType() {
@@ -101,6 +121,7 @@ class CompilationEngine(private val inputFileName: String) {
     private fun compileParameterList() {
         writeStartElement("parameterList")
         depth++
+        kind = SymbolTableHack.Kind.ARG
         compileTypeList()
         depth--
         writeEndElement()
@@ -110,14 +131,19 @@ class CompilationEngine(private val inputFileName: String) {
         if (!isType()) {
             return
         }
+        type = jackTokenizer.getCurrentToken()
         compileType()
         processIdentifier() //var name
+        subroutineSymbolTable.define(name, type, kind)
         while (jackTokenizer.tokenType() == TokenType.SYMBOL
             && jackTokenizer.symbol() == ','
         ) {
             processSymbol(',')
+            type = jackTokenizer.getCurrentToken()
             compileType()
-            processIdentifier() //var name
+            name = jackTokenizer.getCurrentToken()
+            processIdentifier() //var name=
+            subroutineSymbolTable.define(name, type, kind)
         }
     }
 
@@ -140,21 +166,33 @@ class CompilationEngine(private val inputFileName: String) {
         writeStartElement("varDec")
         depth++
         processKeyword(setOf(KeywordType.VAR))
-        compileDec()
+        compileDec(SymbolTableHack.Kind.VAR)
         depth--
         writeEndElement()
     }
 
 
-    private fun compileDec() {
+    private fun compileDec(kind: SymbolTableHack.Kind) {
+        var symbols = classSymbolTable
+        if (kind == SymbolTableHack.Kind.ARG || kind == SymbolTableHack.Kind.VAR) {
+            symbols = subroutineSymbolTable
+        }
+
+        type = jackTokenizer.getCurrentToken()
         compileType()
+        name = jackTokenizer.getCurrentToken()
         processIdentifier() //var name
+        symbols.define(name, type, kind)
+
         while (jackTokenizer.tokenType() == TokenType.SYMBOL
             && jackTokenizer.symbol() == ','
         ) {
             processSymbol(',')
+            name = jackTokenizer.getCurrentToken()
             processIdentifier() //var name
+            symbols.define(name, type, kind)
         }
+        println(classSymbolTable.toString())
         processSymbol(';')
     }
 
@@ -469,6 +507,7 @@ class CompilationEngine(private val inputFileName: String) {
         } else {
             printSyntaxError(keywordTypeSet.toString())
         }
+
         advanceToken()
     }
 
@@ -537,7 +576,7 @@ class CompilationEngine(private val inputFileName: String) {
         }
     }
 
-    private fun writeTokenToFile(tokenType: JackTokenizer.TokenType, token: String) {
+    private fun writeTokenToFile(tokenType: TokenType, token: String) {
         when (tokenType) {
             TokenType.KEYWORD -> writeToElementXml("keyword", token)
             TokenType.IDENTIFIER -> writeToElementXml("identifier", token)
@@ -559,7 +598,7 @@ class CompilationEngine(private val inputFileName: String) {
     }
 
     private fun writeTab(depth: Int) {
-        var sb = StringBuilder()
+        val sb = StringBuilder()
         repeat(depth) {
             sb.append("  ")
         }

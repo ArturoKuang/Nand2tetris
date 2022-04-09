@@ -3,7 +3,7 @@ import java.lang.StringBuilder
 
 class VMWriter(outputFileName: String) {
 
-    private val file = File(outputFileName)
+    private val file = File("$outputFileName.vm")
     private val stringBuilder = StringBuilder()
 
     enum class Segment {
