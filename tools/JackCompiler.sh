@@ -30,6 +30,7 @@ else
 			arg1="$dir/$1"
 		fi
 	fi
-	echo Compiling "$arg1"
+	# echo Compiling "$arg1"
+	echo "${CLASSPATH}:bin/classes:bin/lib/Hack.jar:bin/lib/Compilers.jar"
 	java -classpath "${CLASSPATH}:bin/classes:bin/lib/Hack.jar:bin/lib/Compilers.jar" Hack.Compiler.JackCompiler "$arg1"
 fi
